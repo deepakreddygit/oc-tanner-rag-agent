@@ -1,14 +1,3 @@
-# Core dependencies -- everything the app needs with EMBEDDING_PROVIDER=openai
-# (the public deployment). Deliberately does NOT include sentence-transformers/torch:
-# see requirements-local-embeddings.txt and README "Deployment" for why those are kept
-# out of this file specifically (torch's default Linux wheel pulls in a full CUDA
-# toolkit -- several hundred MB -- that a free-tier host can't even finish installing
-# within its memory budget, and it's entirely unused when embeddings come from OpenAI).
-#
-# (Transitive deps -- numpy, httpx, etc. -- are resolved by pip from these; a full
-# `pip freeze` is deliberately not used here so this file stays readable and the
-# intentional choices are visible.)
-
 fastapi==0.141.1
 uvicorn[standard]==0.52.4
 pydantic==2.13.5
@@ -24,17 +13,11 @@ langgraph==1.2.11
 
 faiss-cpu==1.15.0
 
-# Hybrid retrieval (scripts/vectorstore.py): BM25Retriever (keyword search) lives in
-# langchain-community and needs rank-bm25 to actually run; EnsembleRetriever (the
-# fusion of BM25 + the dense FAISS retriever) moved out of core langchain into
-# langchain-classic in the 1.x split. Both were already transitive deps of langchain --
-# pinned explicitly here because scripts/vectorstore.py imports them directly.
+
 langchain-classic==1.0.8
 rank-bm25==0.2.2
 
-# Retry policy for transient LLM API failures (scripts/llm.py). Already pulled in
-# transitively by langchain, but pinned explicitly here because scripts/llm.py imports
-# it directly -- an app should pin what it imports, not rely on a dependency's dependency.
+
 tenacity==9.1.4
 
 # dev / test
