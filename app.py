@@ -1,14 +1,4 @@
-"""FastAPI service exposing POST /chat.
 
-Single entrypoint at the repo root -- run it directly (`python app.py`) to start the
-server, then hit `/chat` (or open `/docs` in a browser) to get an answer. All the
-actual logic (agent graph, vector store, config, etc.) lives in scripts/, this file
-just wires it together into an API and starts it.
-
-The agent and vector store are constructed once at startup (not per-request) and handed
-to route handlers via FastAPI's dependency system, which also makes them trivial to
-override with fakes in tests (see tests/test_api.py).
-"""
 
 from __future__ import annotations
 
@@ -32,9 +22,7 @@ _agent: Agent | None = None
 
 
 def get_agent() -> Agent:
-    """Lazily build the singleton Agent on first request. Lazy (not at import time) so
-    the app can start and serve /health even before ingestion has run; the clear error
-    below only surfaces when a chat is actually attempted."""
+    
     global _agent
     if _agent is None:
         if not vectorstore_exists():
@@ -48,12 +36,7 @@ def get_agent() -> Agent:
 
 
 def get_client_ip(request: Request) -> str:
-    """Render (like most PaaS hosts) puts the app behind a reverse proxy, so
-    `request.client.host` is the proxy's own address, not the caller's -- every request
-    would share one rate-limit bucket. `X-Forwarded-For` carries the real chain; its
-    first entry is the original client. Trusted here because the only way to reach this
-    app is through Render's proxy, which sets this header itself -- a caller can't
-    reach this process directly to forge it."""
+    
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         return forwarded.split(",")[0].strip()
@@ -92,9 +75,7 @@ def chat(req: ChatRequest, agent: Agent = Depends(get_agent)) -> ChatResponse:
 
 
 if __name__ == "__main__":
-    # Lets you just run `python app.py` instead of remembering the uvicorn invocation.
-    # No --reload here since this is a direct run, not the CLI -- use
-    # `uvicorn app:app --reload` instead if you want auto-reload while editing.
+    
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
