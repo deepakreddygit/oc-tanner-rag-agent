@@ -1,0 +1,14 @@
+# Render "Blueprint" -- lets Render configure the service automatically from this
+# repo instead of you filling in each field by hand. See README "Deployment".
+services:
+  - type: web
+    name: oc-tanner-rag-agent
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt && python scripts/ingest.py"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false # set manually in the Render dashboard -- never committed
+      - key: EMBEDDING_PROVIDER
+        value: openai # avoids loading torch/sentence-transformers on a 512MB instance

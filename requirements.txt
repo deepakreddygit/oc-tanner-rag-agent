@@ -1,0 +1,29 @@
+# Core dependencies -- everything the app needs with EMBEDDING_PROVIDER=openai
+# (the public deployment). Deliberately does NOT include sentence-transformers/torch:
+# see requirements-local-embeddings.txt and README "Deployment" for why those are kept
+# out of this file specifically (torch's default Linux wheel pulls in a full CUDA
+# toolkit -- several hundred MB -- that a free-tier host can't even finish installing
+# within its memory budget, and it's entirely unused when embeddings come from OpenAI).
+#
+# (Transitive deps -- numpy, httpx, etc. -- are resolved by pip from these; a full
+# `pip freeze` is deliberately not used here so this file stays readable and the
+# intentional choices are visible.)
+
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+pydantic==2.13.5
+pydantic-settings==2.15.0
+python-dotenv==1.2.3
+
+langchain==1.4.0
+langchain-core==1.6.2
+langchain-text-splitters==1.1.2
+langchain-openai==1.6.0
+langchain-community==0.4.2
+langgraph==1.2.11
+
+faiss-cpu==1.15.0
+
+# dev / test
+pytest==9.1.1
+httpx==0.28.1
