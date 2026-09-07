@@ -13,9 +13,10 @@ while the first request takes 30-60 seconds to wake back up. That's normal, not 
 
 - One-time ingestion step chunks `data/acme_corp_customer_policies.md`, embeds the
   chunks, and stores them in a FAISS index.
-- A LangGraph agent retrieves the relevant chunks for a question and answers using only
-  those — summarizing in its own words when asked to summarize, and refusing when the
-  document doesn't cover something instead of guessing.
+- A LangGraph agent retrieves the relevant chunks for a question — using hybrid search
+  (keyword + dense, more on that below) — and answers using only those, summarizing in
+  its own words when asked to summarize, and refusing when the document doesn't cover
+  something instead of guessing.
 - FastAPI wraps that as `POST /chat`, with per-session chat history so follow-ups work
   ("what about damaged ones?").
 
@@ -38,8 +39,12 @@ Three nodes, no loops, no conditional branches:
    session's chat history (e.g. "is there a restocking fee on that?" becomes "...on the
    laptop return discussed above?"). Skipped entirely on the first message of a session
    since there's no history to work from yet.
-2. **retrieve** — similarity search over the FAISS index from `scripts/ingest.py`, top-k
-   chunks.
+2. **retrieve** — hybrid search: BM25 (keyword/lexical match against the FAISS index's
+   underlying chunks) and dense vector search (the FAISS index from `scripts/ingest.py`)
+   run in parallel, and their two ranked lists get merged by reciprocal rank fusion into
+   one. BM25 catches exact terms a dense embedding can blur together (a specific fee
+   percentage, a product name); dense search catches paraphrases BM25 would miss
+   entirely ("money back" for "refund"). Top-k after fusion goes to the prompt.
 3. **generate** — answers strictly from those chunks. The prompt tells it to say it
    can't answer from the available documents rather than guess, and to treat retrieved
    text as reference material only, never as instructions to follow (a basic guard in
@@ -52,9 +57,11 @@ already mostly handles on its own, so I left it out. I'd reconsider for a bigger
 corpus where retrieval quality actually varies a lot.
 
 `scripts/llm.py` and `scripts/vectorstore.py` are the only two files that know which
-provider they're talking to (OpenAI, HuggingFace/FAISS). Everything else works against
-LangChain's generic `BaseChatModel`/`VectorStore` interfaces, which is also what makes
-it easy to swap in fakes for testing.
+provider they're talking to (OpenAI, HuggingFace/FAISS) or how retrieval is actually
+implemented (BM25 + FAISS fused). The agent itself depends only on LangChain's generic
+`BaseChatModel`/`BaseRetriever` interfaces — it calls `retriever.invoke(query)` and has
+no idea two retrievers are involved under the hood, which is also what makes it easy to
+swap in fakes for testing.
 
 ## Layout
 
@@ -144,13 +151,16 @@ after that responds normally.
 pytest
 ```
 
-15 tests, no network access or API key needed. Retrieval is tested against the real
-sample document using a deterministic fake embedder, and the agent's logic (history
-handling, node skipping, retries, rate limiting, the actual prompt content) is tested
-against a fake chat model that records what it was called with — see `tests/fakes.py`.
-What this doesn't cover is whether a real OpenAI model's answers are actually faithful
-to the retrieved context — that's a property of the model and the prompt, not something
-a unit test can verify, which is what the real transcript in `sample_io.md` is for.
+17 tests, no network access or API key needed. Retrieval is tested against the real
+sample document both on the dense side (a deterministic fake embedder) and the keyword
+side (BM25 needs no embeddings at all, so it's tested against the real thing directly),
+plus one test that goes through the actual fused hybrid retriever end to end. The
+agent's logic (history handling, node skipping, retries, rate limiting, the actual
+prompt content) is tested against a fake chat model that records what it was called
+with — see `tests/fakes.py`. What this doesn't cover is whether a real OpenAI model's
+answers are actually faithful to the retrieved context — that's a property of the model
+and the prompt, not something a unit test can verify, which is what the real transcript
+in `sample_io.md` is for.
 
 ## Trade-offs made and why
 
@@ -158,6 +168,18 @@ a unit test can verify, which is what the real transcript in `sample_io.md` is f
 to the index concurrently — there's no reason to stand up a database for this. That
 stops being true the moment there's more than one document set or more than one writer,
 and pgvector would be the first thing I'd reach for then.
+
+**Hybrid (BM25 + dense) retrieval, not dense alone.** A document this size and this
+structured (short, clearly-sectioned policy text with specific numbers and names in it)
+is exactly where pure dense retrieval can lose precision — an embedding model
+represents "10% restocking fee" and "15% restocking fee" as very similar vectors, but
+BM25 will happily tell them apart. Fusing the two via reciprocal rank fusion
+(`EnsembleRetriever`, weighted 50/50 — see `scripts/vectorstore.py`) gets both exact-term
+precision and paraphrase recall without picking one and losing the other. The 50/50
+split is a reasonable starting point, not a tuned value — there's no eval set yet to tune
+it against (see "What I'd add" below). BM25 itself is rebuilt from the source document
+at every process start rather than persisted, since it has no model or training step to
+amortize.
 
 **Local embeddings, hosted generation.** They don't have to come from the same
 provider. A small local model handles retrieval fine for a document this size, and
@@ -194,8 +216,10 @@ naming honestly:
   to catch regressions whenever the prompt or retrieval logic changes.
 - Actual observability instead of JSON lines to stdout — OpenTelemetry or Langfuse,
   plus token/cost tracking per request.
-- Better retrieval at scale: hybrid keyword+dense search, a reranking pass. Plain dense
-  retrieval is fine for one short document and stops being fine for a real corpus.
+- A reranking pass over the fused hybrid results before the top-k make it into the
+  prompt (e.g. a cross-encoder), plus an eval set to actually tune the BM25/dense weight
+  instead of leaving it at an untested 50/50. Fine as-is for one short document, worth
+  revisiting the moment retrieval quality varies a lot by query.
 - More than a single "ignore instructions in retrieved content" line for prompt
   injection and PII — scanning documents and model output before they reach a user.
 - A shared session store (Redis/Postgres) so history survives a restart and works

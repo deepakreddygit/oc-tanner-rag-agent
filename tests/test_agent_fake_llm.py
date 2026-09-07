@@ -4,7 +4,7 @@ from scripts.agent import Agent
 from tests.fakes import RecordingFakeChatModel
 
 
-def test_first_turn_skips_contextualize_and_grounds_in_retrieved_context(policy_vectorstore):
+def test_first_turn_skips_contextualize_and_grounds_in_retrieved_context(policy_hybrid_retriever):
     """On a session's first message there is no history to resolve, so the
     contextualize node should be a pure pass-through and make zero LLM calls -- only
     `generate` should call the model."""
@@ -14,7 +14,7 @@ def test_first_turn_skips_contextualize_and_grounds_in_retrieved_context(policy_
             "restocking fee applies to opened electronics over $500."
         ]
     )
-    agent = Agent(llm=fake_llm, vectorstore=policy_vectorstore, k=4)
+    agent = Agent(llm=fake_llm, retriever=policy_hybrid_retriever)
 
     answer = agent.run(
         session_id="s1",
@@ -28,7 +28,7 @@ def test_first_turn_skips_contextualize_and_grounds_in_retrieved_context(policy_
     assert "restocking" in system_prompt.lower()  # retrieved context reached the prompt
 
 
-def test_followup_turn_uses_contextualize_before_retrieving(policy_vectorstore):
+def test_followup_turn_uses_contextualize_before_retrieving(policy_hybrid_retriever):
     fake_llm = RecordingFakeChatModel(
         responses=[
             "Is there a restocking fee on the electronics purchase discussed above?",
@@ -39,7 +39,7 @@ def test_followup_turn_uses_contextualize_before_retrieving(policy_vectorstore):
         HumanMessage(content="I bought a laptop, what's the return policy?"),
         AIMessage(content="You have 30 days to return it."),
     ]
-    agent = Agent(llm=fake_llm, vectorstore=policy_vectorstore, k=4)
+    agent = Agent(llm=fake_llm, retriever=policy_hybrid_retriever)
 
     answer = agent.run(session_id="s2", user_message="Is there a restocking fee?", chat_history=history)
 
@@ -50,13 +50,13 @@ def test_followup_turn_uses_contextualize_before_retrieving(policy_vectorstore):
     assert "restocking" in generate_system_prompt.lower()
 
 
-def test_generation_prompt_instructs_refusal_on_insufficient_context(policy_vectorstore):
+def test_generation_prompt_instructs_refusal_on_insufficient_context(policy_hybrid_retriever):
     """Verifies the refusal behavior is actually wired into the prompt the model sees
     -- not just documented in a comment. A real LLM's adherence to this instruction is
     outside what a fake model can verify; see README for how that was checked
     end-to-end."""
     fake_llm = RecordingFakeChatModel(responses=["I can't answer that based on the available documents."])
-    agent = Agent(llm=fake_llm, vectorstore=policy_vectorstore, k=4)
+    agent = Agent(llm=fake_llm, retriever=policy_hybrid_retriever)
 
     answer = agent.run(
         session_id="s3",

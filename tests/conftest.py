@@ -6,8 +6,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pytest
 from langchain_community.vectorstores import FAISS
 
+from langchain_core.retrievers import BaseRetriever
+
 from scripts.config import settings
-from scripts.vectorstore import load_and_chunk_document
+from scripts.vectorstore import build_hybrid_retriever, load_and_chunk_document
 from tests.fakes import FakeHashEmbeddings
 
 
@@ -17,3 +19,12 @@ def policy_vectorstore() -> FAISS:
     hashing embedder so the test suite never needs network access."""
     docs = load_and_chunk_document(settings.source_document)
     return FAISS.from_documents(docs, FakeHashEmbeddings())
+
+
+@pytest.fixture(scope="session")
+def policy_hybrid_retriever(policy_vectorstore: FAISS) -> BaseRetriever:
+    """The same hybrid (BM25 + dense) retriever production uses, built over the real
+    document. BM25 needs no embedding model at all, and the dense side reuses the fake
+    hashing embedder above, so this -- like everything else in the suite -- runs with no
+    network access and no API key."""
+    return build_hybrid_retriever(policy_vectorstore, k=4)

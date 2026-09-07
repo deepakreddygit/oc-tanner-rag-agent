@@ -21,6 +21,15 @@ cares which one produced it, as long as ingestion and serving agree on the same
 provider for a given deployment -- swapping providers on an existing index would break
 retrieval (the stored vectors' dimensionality wouldn't match new queries), so this is a
 per-environment setting, not a per-request one.
+
+Retrieval itself is hybrid, not FAISS alone: `build_hybrid_retriever` combines this
+FAISS index (dense/semantic search -- catches paraphrases, e.g. "money back" for
+"refund") with a BM25 retriever (keyword/lexical search -- catches exact terms like a
+specific fee percentage or product name that a dense embedding can blur together). The
+two are merged by reciprocal rank fusion via LangChain's `EnsembleRetriever`. BM25 is
+rebuilt from the source document at startup rather than persisted alongside FAISS --
+unlike embeddings it has no model to load and no training step, so rebuilding it from
+the same chunks ingestion already produced is effectively free.
 """
 
 from __future__ import annotations
@@ -28,9 +37,13 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
+from langchain_classic.retrievers import EnsembleRetriever
+from langchain_community.retrievers import BM25Retriever
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
+from langchain_core.retrievers import BaseRetriever
+from langchain_core.vectorstores import VectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from scripts.config import settings
@@ -101,4 +114,27 @@ def load_vectorstore() -> FAISS:
         str(settings.vectorstore_dir),
         get_embeddings(),
         allow_dangerous_deserialization=True,  # local file we generated ourselves
+    )
+
+
+def build_bm25_retriever(k: int | None = None) -> BM25Retriever:
+    """The keyword half of hybrid retrieval. Re-chunks the source document the same way
+    ingestion did (deterministic given the same file and chunking settings) and builds
+    an in-memory BM25 index over it -- no embedding model, no persistence, cheap enough
+    to just do at startup."""
+    docs = load_and_chunk_document(settings.source_document)
+    retriever = BM25Retriever.from_documents(docs)
+    retriever.k = k or settings.retrieval_k
+    return retriever
+
+
+def build_hybrid_retriever(vectorstore: VectorStore, k: int | None = None) -> BaseRetriever:
+    """Combines BM25 (keyword) with the given vector store (dense) via reciprocal rank
+    fusion. Returns a plain `BaseRetriever` -- the agent depends only on that interface
+    (`.invoke(query) -> list[Document]`), so it doesn't know or care that two retrievers
+    are involved under the hood."""
+    k = k or settings.retrieval_k
+    return EnsembleRetriever(
+        retrievers=[build_bm25_retriever(k=k), vectorstore.as_retriever(search_kwargs={"k": k})],
+        weights=[settings.hybrid_keyword_weight, 1 - settings.hybrid_keyword_weight],
     )

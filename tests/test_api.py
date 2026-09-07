@@ -13,11 +13,11 @@ def test_health_endpoint():
     assert "vectorstore_ready" in resp.json()
 
 
-def test_chat_endpoint_returns_grounded_answer(policy_vectorstore):
+def test_chat_endpoint_returns_grounded_answer(policy_hybrid_retriever):
     fake_llm = RecordingFakeChatModel(
         responses=["A 10% restocking fee applies to opened electronics over $500."]
     )
-    app.dependency_overrides[get_agent] = lambda: Agent(llm=fake_llm, vectorstore=policy_vectorstore, k=4)
+    app.dependency_overrides[get_agent] = lambda: Agent(llm=fake_llm, retriever=policy_hybrid_retriever)
     client = TestClient(app)
     try:
         resp = client.post(
@@ -31,7 +31,7 @@ def test_chat_endpoint_returns_grounded_answer(policy_vectorstore):
         app.dependency_overrides.clear()
 
 
-def test_chat_endpoint_uses_session_history_on_second_turn(policy_vectorstore):
+def test_chat_endpoint_uses_session_history_on_second_turn(policy_hybrid_retriever):
     fake_llm = RecordingFakeChatModel(
         responses=[
             "You have 30 days from delivery to return an item.",
@@ -39,7 +39,7 @@ def test_chat_endpoint_uses_session_history_on_second_turn(policy_vectorstore):
             "A 10% restocking fee applies to opened electronics over $500.",
         ]
     )
-    app.dependency_overrides[get_agent] = lambda: Agent(llm=fake_llm, vectorstore=policy_vectorstore, k=4)
+    app.dependency_overrides[get_agent] = lambda: Agent(llm=fake_llm, retriever=policy_hybrid_retriever)
     client = TestClient(app)
     try:
         r1 = client.post(
@@ -58,12 +58,12 @@ def test_chat_endpoint_uses_session_history_on_second_turn(policy_vectorstore):
         app.dependency_overrides.clear()
 
 
-def test_chat_rejects_empty_message(policy_vectorstore):
+def test_chat_rejects_empty_message(policy_hybrid_retriever):
     # Overridden so this test isolates request validation from agent availability --
     # without a real vector store (or an override) the agent dependency itself would
     # 503 before validation ever runs, which is not what this test is checking.
     fake_llm = RecordingFakeChatModel(responses=["unused"])
-    app.dependency_overrides[get_agent] = lambda: Agent(llm=fake_llm, vectorstore=policy_vectorstore, k=4)
+    app.dependency_overrides[get_agent] = lambda: Agent(llm=fake_llm, retriever=policy_hybrid_retriever)
     client = TestClient(app)
     try:
         resp = client.post("/chat", json={"session_id": "api-test-3", "message": ""})
@@ -86,7 +86,7 @@ def test_chat_returns_503_when_vectorstore_missing(monkeypatch):
     assert "ingest.py" in resp.json()["detail"]
 
 
-def test_chat_returns_429_when_rate_limited(policy_vectorstore):
+def test_chat_returns_429_when_rate_limited(policy_hybrid_retriever):
     # Overrides the rate-limit dependency directly rather than exhausting the real
     # chat_rate_limiter singleton -- that singleton is process-wide and shared with
     # every other test in this file, so driving it into its blocked state here would
@@ -95,7 +95,7 @@ def test_chat_returns_429_when_rate_limited(policy_vectorstore):
         raise HTTPException(status_code=429, detail="Too many requests. Please wait a moment before trying again.")
 
     fake_llm = RecordingFakeChatModel(responses=["unused"])
-    app.dependency_overrides[get_agent] = lambda: Agent(llm=fake_llm, vectorstore=policy_vectorstore, k=4)
+    app.dependency_overrides[get_agent] = lambda: Agent(llm=fake_llm, retriever=policy_hybrid_retriever)
     app.dependency_overrides[enforce_rate_limit] = always_block
     client = TestClient(app)
     try:

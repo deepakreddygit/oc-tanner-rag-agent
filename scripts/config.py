@@ -41,6 +41,12 @@ class Settings(BaseSettings):
 
     # --- Retrieval ---
     retrieval_k: int = 4
+    # Hybrid retrieval mixes BM25 (keyword/lexical match) with dense vector search,
+    # combined by reciprocal rank fusion (see scripts/vectorstore.py). This is the
+    # weight given to the keyword side; the dense side gets 1 - this. 0.5/0.5 has no
+    # special justification beyond "start balanced" -- worth tuning against a real eval
+    # set once one exists (see README "What I'd add").
+    hybrid_keyword_weight: float = 0.5
 
     # --- App ---
     log_level: str = "INFO"

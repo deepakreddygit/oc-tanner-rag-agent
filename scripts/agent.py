@@ -11,8 +11,12 @@ Why this shape and not more:
   because it lacks the noun the user is actually asking about. It's a no-op (skips the
   LLM call entirely) on a session's first turn, when there is no history to resolve
   against -- so a single-turn question pays no extra latency or cost.
-- `retrieve` and `generate` are the minimum RAG loop. There is no separate "grade
-  documents" or "decide whether to answer" node with a conditional edge: groundedness
+- `retrieve` and `generate` are the minimum RAG loop. Retrieval itself is hybrid --
+  keyword (BM25) plus dense (vector) search, fused together -- see
+  scripts/vectorstore.py's `build_hybrid_retriever` for why; this node just calls
+  whatever `BaseRetriever` it was given and doesn't know or care that two retrievers
+  are involved. There is no separate "grade documents" or "decide whether to answer"
+  node with a conditional edge: groundedness
   and refusal-on-insufficient-context are enforced through the generation prompt
   instead. A grading node would add a second LLM call and a branch for a benefit that,
   for a single small document, this prompt already achieves -- exactly the "elaborate
@@ -31,7 +35,7 @@ from typing import TypedDict
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
-from langchain_core.vectorstores import VectorStore
+from langchain_core.retrievers import BaseRetriever
 from langgraph.graph import END, START, StateGraph
 
 from scripts.config import settings
@@ -79,13 +83,15 @@ def format_docs(docs: list[Document]) -> str:
 
 
 class Agent:
-    """Wraps the compiled LangGraph graph. `llm` and `vectorstore` are injected rather
+    """Wraps the compiled LangGraph graph. `llm` and `retriever` are injected rather
     than constructed internally so tests can supply fakes and the API layer can build
-    real ones once at startup."""
+    real ones once at startup. `retriever` is a plain `BaseRetriever` -- this class
+    doesn't know or care whether it's a single vector store or, as in production, a
+    hybrid BM25 + dense ensemble (see scripts/vectorstore.py's `build_hybrid_retriever`)."""
 
-    def __init__(self, llm: BaseChatModel, vectorstore: VectorStore, k: int | None = None):
+    def __init__(self, llm: BaseChatModel, retriever: BaseRetriever, k: int | None = None):
         self.llm = llm
-        self.vectorstore = vectorstore
+        self.retriever = retriever
         self.k = k or settings.retrieval_k
         self._graph = self._build_graph()
 
@@ -117,7 +123,11 @@ class Agent:
 
     def _retrieve(self, state: AgentState) -> dict:
         query = state["standalone_query"]
-        docs = self.vectorstore.similarity_search(query, k=self.k)
+        # A hybrid retriever fuses two ranked lists (keyword + dense) and can return
+        # their union, not just k results -- truncate here so the prompt always sees a
+        # bounded, predictable number of chunks regardless of how much the two sides
+        # overlap.
+        docs = self.retriever.invoke(query)[: self.k]
         log_event(
             "retrieve",
             session_id=state["session_id"],

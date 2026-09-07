@@ -24,6 +24,14 @@ langgraph==1.2.11
 
 faiss-cpu==1.15.0
 
+# Hybrid retrieval (scripts/vectorstore.py): BM25Retriever (keyword search) lives in
+# langchain-community and needs rank-bm25 to actually run; EnsembleRetriever (the
+# fusion of BM25 + the dense FAISS retriever) moved out of core langchain into
+# langchain-classic in the 1.x split. Both were already transitive deps of langchain --
+# pinned explicitly here because scripts/vectorstore.py imports them directly.
+langchain-classic==1.0.8
+rank-bm25==0.2.2
+
 # Retry policy for transient LLM API failures (scripts/llm.py). Already pulled in
 # transitively by langchain, but pinned explicitly here because scripts/llm.py imports
 # it directly -- an app should pin what it imports, not rely on a dependency's dependency.

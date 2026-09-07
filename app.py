@@ -20,7 +20,7 @@ from scripts.memory import session_store
 from scripts.observability import log_event
 from scripts.rate_limit import chat_rate_limiter
 from scripts.schemas import ChatRequest, ChatResponse
-from scripts.vectorstore import load_vectorstore, vectorstore_exists
+from scripts.vectorstore import build_hybrid_retriever, load_vectorstore, vectorstore_exists
 
 app = FastAPI(
     title="Acme Corp RAG Agent",
@@ -42,7 +42,8 @@ def get_agent() -> Agent:
                 status_code=503,
                 detail="Vector store not found. Run `python scripts/ingest.py` first.",
             )
-        _agent = Agent(llm=build_llm(), vectorstore=load_vectorstore())
+        retriever = build_hybrid_retriever(load_vectorstore())
+        _agent = Agent(llm=build_llm(), retriever=retriever)
     return _agent
 
 
