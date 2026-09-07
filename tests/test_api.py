@@ -1,7 +1,8 @@
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.agent import Agent
-from app.main import app, get_agent
+from app.main import app, enforce_rate_limit, get_agent
 from tests.fakes import RecordingFakeChatModel
 
 
@@ -83,3 +84,22 @@ def test_chat_returns_503_when_vectorstore_missing(monkeypatch):
     resp = client.post("/chat", json={"session_id": "api-test-4", "message": "hello"})
     assert resp.status_code == 503
     assert "ingest.py" in resp.json()["detail"]
+
+
+def test_chat_returns_429_when_rate_limited(policy_vectorstore):
+    # Overrides the rate-limit dependency directly rather than exhausting the real
+    # chat_rate_limiter singleton -- that singleton is process-wide and shared with
+    # every other test in this file, so driving it into its blocked state here would
+    # leak into (and flake) whichever test happens to run next.
+    def always_block():
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait a moment before trying again.")
+
+    fake_llm = RecordingFakeChatModel(responses=["unused"])
+    app.dependency_overrides[get_agent] = lambda: Agent(llm=fake_llm, vectorstore=policy_vectorstore, k=4)
+    app.dependency_overrides[enforce_rate_limit] = always_block
+    client = TestClient(app)
+    try:
+        resp = client.post("/chat", json={"session_id": "api-test-5", "message": "hello"})
+        assert resp.status_code == 429
+    finally:
+        app.dependency_overrides.clear()

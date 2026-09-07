@@ -35,6 +35,7 @@ from langchain_core.vectorstores import VectorStore
 from langgraph.graph import END, START, StateGraph
 
 from app.config import settings
+from app.llm import invoke_with_retry
 from app.observability import log_event, timed_event
 
 CONTEXTUALIZE_SYSTEM_PROMPT = (
@@ -109,7 +110,7 @@ class Agent:
                 *history,
                 HumanMessage(content=state["user_message"]),
             ]
-            result = self.llm.invoke(messages)
+            result = invoke_with_retry(self.llm, messages, node="contextualize", session_id=state["session_id"])
             standalone = (result.content or "").strip() or state["user_message"]
             extra["standalone_query"] = standalone
         return {"standalone_query": standalone}
@@ -134,7 +135,7 @@ class Agent:
             HumanMessage(content=state["user_message"]),
         ]
         with timed_event("generate", session_id=state["session_id"]) as extra:
-            result = self.llm.invoke(messages)
+            result = invoke_with_retry(self.llm, messages, node="generate", session_id=state["session_id"])
             answer = result.content
             extra["answer_chars"] = len(answer)
         return {"answer": answer}

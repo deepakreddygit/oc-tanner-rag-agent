@@ -13,6 +13,7 @@ free-tier cold starts).
 
 - [What this is](#what-this-is)
 - [Architecture](#architecture)
+- [Reliability and abuse protection](#reliability-and-abuse-protection)
 - [Setup, from zero](#setup-from-zero)
 - [Running it](#running-it)
 - [Example](#example)
@@ -76,6 +77,31 @@ see trade-offs).
 provider (OpenAI, HuggingFace/FAISS respectively). `app/agent.py` depends only on
 LangChain's `BaseChatModel` / `VectorStore` interfaces, so either can be swapped without
 touching the agent, and both are trivially replaced with fakes in tests.
+
+## Reliability and abuse protection
+
+This is a live, publicly reachable service backed by a metered API, not just a script
+run locally -- two failure modes come with that, and both are handled directly rather
+than left as a "future work" bullet:
+
+- **Transient LLM failures.** Every model call the agent makes (`contextualize` and
+  `generate`) goes through `invoke_with_retry` in `app/llm.py`: up to 3 attempts with
+  short exponential backoff, but only for error classes where retrying actually helps
+  (rate limits, timeouts, connection errors, 5xxs from OpenAI) -- never for bad input or
+  auth failures, where a retry would just waste time before failing anyway. Each retry
+  is logged (`llm_retry` event, with the node and session so a spike is traceable to
+  where it happened) without holding any state shared across requests, so this is safe
+  under FastAPI's threaded, concurrent request handling.
+- **Endpoint abuse.** `POST /chat` is rate-limited per client IP (`app/rate_limit.py`):
+  20 requests/minute, enough for a real conversation or a reviewer trying all three
+  required behaviors, low enough that a runaway loop or scraper gets a `429` within
+  seconds rather than running up API cost. The client IP is read from
+  `X-Forwarded-For` because Render puts the app behind a reverse proxy -- trusted here
+  because that proxy is the only way to reach this process at all, so a caller can't
+  forge it. The limiter is in-memory and per-process, the same trade-off already made by
+  the session store below (see [Trade-offs](#trade-offs-made-and-why)); a multi-instance
+  deployment would move the counters to a shared store (e.g. Redis) the same way it
+  would move session history.
 
 ## Setup, from zero
 
@@ -251,6 +277,12 @@ strong nudge. See below for what closes that gap.
 scaffolding either -- three nodes is little enough that a scaffold would add more
 abstraction than it removes.
 
+**In-memory rate limiter, not Redis.** Same reasoning as the in-memory session store:
+one process, one free-tier instance, no shared state needed yet. It resets on a restart
+and doesn't coordinate across multiple instances -- acceptable for a demo deployment,
+not for a real multi-instance production one, where it'd move to the same shared store
+as session history.
+
 ## What I'd add with more time
 
 The assignment explicitly isn't graded on feature completeness, so these are
@@ -262,9 +294,11 @@ things I'd expect a production agentic system at this scale to need:
   the retrieved chunks), and a regression suite that runs it in CI on every prompt or
   retrieval change.
 - **Real observability**: `app/observability.py` currently emits structured JSON log
-  lines per node (query, retrieved chunk ids, latency) as a placeholder for what a
-  trace needs to capture; a real deployment would export these as OpenTelemetry spans
-  (or to Langfuse) instead of stdout, and add token/cost tracking per request.
+  lines per node (query, retrieved chunk ids, latency, LLM retries -- see
+  [Reliability and abuse protection](#reliability-and-abuse-protection)) as a
+  placeholder for what a trace needs to capture; a real deployment would export these as
+  OpenTelemetry spans (or to Langfuse) instead of stdout, and add token/cost tracking per
+  request.
 - **Retrieval quality**: hybrid (keyword + dense) search and a reranking pass over the
   top-N candidates before the top-k make it into the prompt -- this document is short
   enough that plain dense retrieval works fine, but that stops being true at real

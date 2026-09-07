@@ -24,6 +24,11 @@ langgraph==1.2.11
 
 faiss-cpu==1.15.0
 
+# Retry policy for transient LLM API failures (app/llm.py). Already pulled in
+# transitively by langchain, but pinned explicitly here because app/llm.py imports it
+# directly -- an app should pin what it imports, not rely on a dependency's dependency.
+tenacity==9.1.4
+
 # dev / test
 pytest==9.1.1
 httpx==0.28.1

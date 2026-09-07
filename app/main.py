@@ -7,12 +7,13 @@ override with fakes in tests (see tests/test_api.py).
 
 from __future__ import annotations
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 
 from app.agent import Agent
 from app.llm import build_llm
 from app.memory import session_store
 from app.observability import log_event
+from app.rate_limit import chat_rate_limiter
 from app.schemas import ChatRequest, ChatResponse
 from app.vectorstore import load_vectorstore, vectorstore_exists
 
@@ -40,12 +41,35 @@ def get_agent() -> Agent:
     return _agent
 
 
+def get_client_ip(request: Request) -> str:
+    """Render (like most PaaS hosts) puts the app behind a reverse proxy, so
+    `request.client.host` is the proxy's own address, not the caller's -- every request
+    would share one rate-limit bucket. `X-Forwarded-For` carries the real chain; its
+    first entry is the original client. Trusted here because the only way to reach this
+    app is through Render's proxy, which sets this header itself -- a caller can't
+    reach this process directly to forge it."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def enforce_rate_limit(request: Request) -> None:
+    client_ip = get_client_ip(request)
+    if not chat_rate_limiter.allow(client_ip):
+        log_event("rate_limited", client_ip=client_ip)
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests. Please wait a moment before trying again.",
+        )
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "vectorstore_ready": vectorstore_exists()}
 
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/chat", response_model=ChatResponse, dependencies=[Depends(enforce_rate_limit)])
 def chat(req: ChatRequest, agent: Agent = Depends(get_agent)) -> ChatResponse:
     history = session_store.get_history(req.session_id)
     try:
