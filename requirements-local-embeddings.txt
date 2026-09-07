@@ -1,12 +1,2 @@
-# Extra dependencies for local development with EMBEDDING_PROVIDER=huggingface (the
-# default -- see .env.example and README "Trade-offs"). Install on top of
-# requirements.txt:
-#
-#   pip install -r requirements.txt -r requirements-local-embeddings.txt
-#
-# Kept separate from requirements.txt so the deployed instance (EMBEDDING_PROVIDER=
-# openai) never installs torch -- see requirements.txt's header comment and README
-# "Deployment" for why that matters on a memory-capped free host.
-
 langchain-huggingface==1.2.2
 sentence-transformers==6.0.1
