@@ -2,7 +2,7 @@
 (rather than monkeypatching time.monotonic) so these tests are deterministic and don't
 depend on real wall-clock time passing during the test run."""
 
-from app.rate_limit import RateLimiter
+from scripts.rate_limit import RateLimiter
 
 
 def test_allows_up_to_max_requests_then_blocks():

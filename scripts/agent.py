@@ -21,7 +21,7 @@ Why this shape and not more:
 
 State is intentionally thin: the raw user message, resolved history, the standalone
 query, the retrieved docs, and the final answer. Nothing here needs to survive past one
-request except chat history, which lives in app/memory.py, not in this graph state.
+request except chat history, which lives in scripts/memory.py, not in this graph state.
 """
 
 from __future__ import annotations
@@ -34,9 +34,9 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.vectorstores import VectorStore
 from langgraph.graph import END, START, StateGraph
 
-from app.config import settings
-from app.llm import invoke_with_retry
-from app.observability import log_event, timed_event
+from scripts.config import settings
+from scripts.llm import invoke_with_retry
+from scripts.observability import log_event, timed_event
 
 CONTEXTUALIZE_SYSTEM_PROMPT = (
     "Given the conversation so far and a new user message, rewrite the new message as a "

@@ -1,5 +1,10 @@
 """FastAPI service exposing POST /chat.
 
+Single entrypoint at the repo root -- run it directly (`python app.py`) to start the
+server, then hit `/chat` (or open `/docs` in a browser) to get an answer. All the
+actual logic (agent graph, vector store, config, etc.) lives in scripts/, this file
+just wires it together into an API and starts it.
+
 The agent and vector store are constructed once at startup (not per-request) and handed
 to route handlers via FastAPI's dependency system, which also makes them trivial to
 override with fakes in tests (see tests/test_api.py).
@@ -9,13 +14,13 @@ from __future__ import annotations
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 
-from app.agent import Agent
-from app.llm import build_llm
-from app.memory import session_store
-from app.observability import log_event
-from app.rate_limit import chat_rate_limiter
-from app.schemas import ChatRequest, ChatResponse
-from app.vectorstore import load_vectorstore, vectorstore_exists
+from scripts.agent import Agent
+from scripts.llm import build_llm
+from scripts.memory import session_store
+from scripts.observability import log_event
+from scripts.rate_limit import chat_rate_limiter
+from scripts.schemas import ChatRequest, ChatResponse
+from scripts.vectorstore import load_vectorstore, vectorstore_exists
 
 app = FastAPI(
     title="Acme Corp RAG Agent",
@@ -83,3 +88,12 @@ def chat(req: ChatRequest, agent: Agent = Depends(get_agent)) -> ChatResponse:
         ) from exc
     session_store.append_turn(req.session_id, req.message, answer)
     return ChatResponse(session_id=req.session_id, response=answer)
+
+
+if __name__ == "__main__":
+    # Lets you just run `python app.py` instead of remembering the uvicorn invocation.
+    # No --reload here since this is a direct run, not the CLI -- use
+    # `uvicorn app:app --reload` instead if you want auto-reload while editing.
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -33,7 +33,7 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from app.config import settings
+from scripts.config import settings
 
 
 @lru_cache(maxsize=1)

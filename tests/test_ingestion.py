@@ -1,5 +1,5 @@
-from app.config import settings
-from app.vectorstore import load_and_chunk_document
+from scripts.config import settings
+from scripts.vectorstore import load_and_chunk_document
 
 
 def test_chunking_produces_multiple_chunks_with_metadata():

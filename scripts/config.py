@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # "huggingface" (default): local sentence-transformers model, offline, no API key
     # or per-call cost. "openai": hosted embeddings -- used for the memory-capped
     # free-tier deployment where loading torch locally risks OOM. See
-    # app/vectorstore.py and README "Deployment".
+    # scripts/vectorstore.py and README "Deployment".
     embedding_provider: str = "huggingface"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     openai_embedding_model: str = "text-embedding-3-small"

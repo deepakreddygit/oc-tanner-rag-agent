@@ -1,6 +1,6 @@
 from langchain_core.messages import AIMessage, HumanMessage
 
-from app.agent import Agent
+from scripts.agent import Agent
 from tests.fakes import RecordingFakeChatModel
 
 

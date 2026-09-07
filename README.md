@@ -51,10 +51,18 @@ static document it felt like a second LLM call to catch something the generation
 already mostly handles on its own, so I left it out. I'd reconsider for a bigger, noisier
 corpus where retrieval quality actually varies a lot.
 
-`app/llm.py` and `app/vectorstore.py` are the only two files that know which provider
-they're talking to (OpenAI, HuggingFace/FAISS). Everything else works against
+`scripts/llm.py` and `scripts/vectorstore.py` are the only two files that know which
+provider they're talking to (OpenAI, HuggingFace/FAISS). Everything else works against
 LangChain's generic `BaseChatModel`/`VectorStore` interfaces, which is also what makes
 it easy to swap in fakes for testing.
+
+## Layout
+
+Kept flat on purpose: `app.py` at the root is the one thing you run — it wires
+everything together into the FastAPI service and starts it. Everything it depends on
+(the agent graph, config, the vector store, retries, rate limiting, etc.) lives in
+`scripts/`, alongside the one-time ingestion script. There's no separate installable
+`app` package here; it isn't needed for a single-service project this size.
 
 ## Retries and rate limiting
 
@@ -92,8 +100,9 @@ You'll need Python 3.10+ and an OpenAI API key.
    Everything else in there already has a sensible default.
 4. `python scripts/ingest.py` — chunks the document, embeds it locally, writes the FAISS
    index to `vectorstore/`. Only needs to run once, or again if the source doc changes.
-5. `uvicorn app.main:app --reload` — serves on `http://127.0.0.1:8000`, with interactive
-   docs at `/docs`.
+5. `python app.py` — serves on `http://127.0.0.1:8000`, with interactive docs at
+   `/docs`. (If you're actively editing and want auto-reload, `uvicorn app:app --reload`
+   does the same thing.)
 
 ## Trying it
 

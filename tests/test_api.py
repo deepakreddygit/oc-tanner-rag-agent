@@ -1,8 +1,8 @@
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app.agent import Agent
-from app.main import app, enforce_rate_limit, get_agent
+from scripts.agent import Agent
+from app import app, enforce_rate_limit, get_agent
 from tests.fakes import RecordingFakeChatModel
 
 
@@ -76,7 +76,7 @@ def test_chat_returns_503_when_vectorstore_missing(monkeypatch):
     # Forces the "ingestion hasn't run yet" branch regardless of whether this machine
     # actually has a vector store on disk, so the test is deterministic in CI and on a
     # freshly cloned checkout alike.
-    import app.main as main_module
+    import app as main_module
 
     monkeypatch.setattr(main_module, "vectorstore_exists", lambda: False)
     monkeypatch.setattr(main_module, "_agent", None)

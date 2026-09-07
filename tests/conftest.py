@@ -6,8 +6,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pytest
 from langchain_community.vectorstores import FAISS
 
-from app.config import settings
-from app.vectorstore import load_and_chunk_document
+from scripts.config import settings
+from scripts.vectorstore import load_and_chunk_document
 from tests.fakes import FakeHashEmbeddings
 
 

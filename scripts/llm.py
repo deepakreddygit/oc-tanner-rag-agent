@@ -2,7 +2,7 @@
 
 The factory is isolated in its own module so the provider can be swapped (or replaced
 with a fake in tests) without touching agent logic. Only OpenAI is wired up per this
-assignment's choice, but nothing in app/agent.py depends on that concretely -- it only
+assignment's choice, but nothing in scripts/agent.py depends on that concretely -- it only
 depends on langchain_core.language_models.BaseChatModel.
 
 `invoke_with_retry` wraps every model call the agent makes. An agentic system that
@@ -23,8 +23,8 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from tenacity import RetryCallState, retry, retry_if_exception, stop_after_attempt, wait_exponential
 
-from app.config import settings
-from app.observability import log_event
+from scripts.config import settings
+from scripts.observability import log_event
 
 if TYPE_CHECKING:
     from langchain_core.messages import AIMessage

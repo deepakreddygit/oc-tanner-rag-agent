@@ -15,8 +15,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.config import settings  # noqa: E402
-from app.vectorstore import build_vectorstore  # noqa: E402
+from scripts.config import settings  # noqa: E402
+from scripts.vectorstore import build_vectorstore  # noqa: E402
 
 
 def main() -> None:

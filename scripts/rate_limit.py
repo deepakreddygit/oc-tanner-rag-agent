@@ -9,7 +9,7 @@ use for. If this ever ran behind multiple instances, the counters would need to 
 a shared store -- called out in the README rather than solved speculatively here.
 
 Deliberately in-memory and process-local, same trade-off already made by
-app/memory.py's SessionStore, and for the same reason: one process, one free-tier
+scripts/memory.py's SessionStore, and for the same reason: one process, one free-tier
 instance, no shared state needed yet.
 """
 

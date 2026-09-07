@@ -3,7 +3,7 @@
 Both fakes exist so the test suite can verify the agent's control flow and prompt
 construction without a network call to an embedding provider or an LLM provider. They
 are never imported by application code -- production always uses the real
-HuggingFace embeddings and ChatOpenAI (see app/vectorstore.py and app/llm.py).
+HuggingFace embeddings and ChatOpenAI (see scripts/vectorstore.py and scripts/llm.py).
 """
 
 from __future__ import annotations
